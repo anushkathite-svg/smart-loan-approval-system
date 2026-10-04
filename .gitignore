@@ -1,0 +1,13 @@
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+.ipynb_checkpoints/
+models/
+data/raw/*.csv
+data/processed/*.npy
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
