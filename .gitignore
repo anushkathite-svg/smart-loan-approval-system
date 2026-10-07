@@ -11,3 +11,5 @@ data/processed/*.npy
 Thumbs.db
 .vscode/
 .idea/
+mlflow.db
+mlruns/
