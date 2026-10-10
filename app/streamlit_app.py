@@ -143,10 +143,93 @@ def enrich_features(d):
 
 
 def predict_probability(applicant_dict):
+    """ML prediction blended with realistic rule-based scoring."""
     enriched = enrich_features(applicant_dict)
     df_input = pd.DataFrame([enriched])
     X_proc = preprocessor.transform(df_input)
-    return stack.predict_proba(X_proc)[0, 1]
+    ml_prob = stack.predict_proba(X_proc)[0, 1]
+
+    # Cap ML probability to counter synthetic-data overconfidence
+    ml_prob_capped = min(ml_prob, 0.85)
+
+    # --- Rule-based score ---
+    rule_score = 0.5
+
+    cs = applicant_dict['Credit_Score']
+    if cs >= 800: rule_score += 0.30
+    elif cs >= 750: rule_score += 0.22
+    elif cs >= 700: rule_score += 0.12
+    elif cs >= 670: rule_score += 0.04
+    elif cs >= 650: rule_score -= 0.05
+    elif cs >= 600: rule_score -= 0.15
+    elif cs >= 550: rule_score -= 0.25
+    else: rule_score -= 0.35
+
+    dti = applicant_dict['Debt_to_Income']
+    if dti <= 0.15: rule_score += 0.12
+    elif dti <= 0.25: rule_score += 0.06
+    elif dti <= 0.35: rule_score -= 0.03
+    elif dti <= 0.45: rule_score -= 0.12
+    elif dti <= 0.60: rule_score -= 0.20
+    else: rule_score -= 0.32
+
+    mp = applicant_dict['Missed_Payments']
+    if mp == 0: rule_score += 0.05
+    elif mp == 1: rule_score -= 0.04
+    elif mp == 2: rule_score -= 0.12
+    elif mp <= 4: rule_score -= 0.22
+    else: rule_score -= 0.35
+
+    ld = applicant_dict['Loan_Defaults']
+    if ld == 0: rule_score += 0.05
+    elif ld == 1: rule_score -= 0.18
+    elif ld == 2: rule_score -= 0.28
+    else: rule_score -= 0.40
+
+    emp = applicant_dict['Employment_Type']
+    if emp == 'Government': rule_score += 0.08
+    elif emp == 'Private': rule_score += 0.02
+    elif emp == 'Self-Employed': rule_score -= 0.03
+    elif emp == 'Skilled Labor': rule_score -= 0.10
+    elif emp == 'Unemployed': rule_score -= 0.35
+
+    ccu = applicant_dict['Credit_Card_Utilization']
+    if ccu <= 0.30: rule_score += 0.04
+    elif ccu <= 0.50: rule_score -= 0.02
+    elif ccu <= 0.70: rule_score -= 0.06
+    else: rule_score -= 0.12
+
+    if applicant_dict['Tax_Return_Filed'] == 'No': rule_score -= 0.08
+    if applicant_dict['PAN_Verified'] == 'No': rule_score -= 0.12
+    if applicant_dict['Aadhaar_Verified'] == 'No': rule_score -= 0.08
+
+    if applicant_dict['Collateral'] == 'Yes': rule_score += 0.04
+    elif applicant_dict['Loan_Amount'] > 500000: rule_score -= 0.05
+
+    income = applicant_dict['Annual_Income']
+    loan = applicant_dict['Loan_Amount']
+    lti = loan / (income + 1)
+    if lti > 3.0: rule_score -= 0.15
+    elif lti > 2.0: rule_score -= 0.08
+    elif lti > 1.2: rule_score -= 0.03
+    elif lti < 0.8: rule_score += 0.05
+
+    if income >= 2000000: rule_score += 0.08
+    elif income >= 1000000: rule_score += 0.04
+    elif income < 300000: rule_score -= 0.15
+    elif income < 500000: rule_score -= 0.06
+
+    savings = applicant_dict['Savings']
+    if savings >= 1000000: rule_score += 0.05
+    elif savings >= 300000: rule_score += 0.02
+    elif savings < 30000: rule_score -= 0.08
+
+    rule_score = max(0.02, min(0.98, rule_score))
+
+    # Blend: 50% capped ML + 50% rule-based
+    final_prob = 0.5 * ml_prob_capped + 0.5 * rule_score
+    final_prob = max(0.01, min(0.99, final_prob))
+    return final_prob
 
 
 col1, col2, col3 = st.columns([1, 1, 1])
