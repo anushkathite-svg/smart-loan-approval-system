@@ -292,30 +292,41 @@ if predict_button:
 
     except Exception as e:
         st.warning(f"SHAP explanation unavailable: {e}")
+        contributions = []
 
     st.markdown("---")
 
     if decision == "REJECTED":
         st.markdown("## 💡 Recommendation Engine")
-        st.info("Here are loan configurations that could improve your approval chances.")
+        st.info(f"Your current approval probability is **{prob:.2%}**. Here are ways to improve it.")
+
+        # Show top rejection factors
+        if contributions:
+            top_factors = contributions[:3]
+            factor_text = " • ".join([f"**{f[0]}** ({f[1]:+.2f})" for f in top_factors])
+            st.warning(f"**Main rejection factors:** {factor_text}")
+
+        st.markdown("### 🎯 Tuning Options")
 
         recommendations = []
         for amt_factor in [0.9, 0.8, 0.7, 0.6, 0.5]:
-            for tenure_add in [0, 3, 5, 10]:
+            for tenure_add in [0, 5, 10]:
                 for rate_factor in [1.0, 0.9, 0.85]:
                     mod = applicant.copy()
                     mod['Loan_Amount'] = int(loan_amount * amt_factor)
                     mod['Loan_Tenure'] = loan_tenure + tenure_add
                     mod['Interest_Rate'] = round(interest_rate * rate_factor, 2)
                     new_prob = predict_probability(mod)
+                    delta = new_prob - prob
                     recommendations.append({
                         'Loan Amount (₹)': f"{mod['Loan_Amount']:,}",
                         'Tenure (yr)': mod['Loan_Tenure'],
                         'Rate (%)': mod['Interest_Rate'],
-                        'Amount Change': f"{(amt_factor - 1) * 100:+.0f}%",
-                        'Rate Change': f"{(rate_factor - 1) * 100:+.0f}%",
-                        'Approval Probability': f"{new_prob:.1%}",
-                        'Flipped': "✅ Yes" if new_prob >= 0.5 and prob < 0.5 else "—",
+                        'Amount Δ': f"{(amt_factor - 1) * 100:+.0f}%",
+                        'Rate Δ': f"{(rate_factor - 1) * 100:+.0f}%",
+                        'New Probability': f"{new_prob:.2%}",
+                        'Improvement': f"{delta:+.2%}",
+                        'Result': "✅ Approved" if new_prob >= 0.5 else "❌ Still Rejected",
                         '_prob': new_prob
                     })
 
@@ -323,20 +334,26 @@ if predict_button:
         rec_df = rec_df.drop(columns=['_prob'])
         rec_df = rec_df.drop_duplicates(subset=['Loan Amount (₹)', 'Tenure (yr)', 'Rate (%)'])
 
-        flipped = rec_df[rec_df['Flipped'] == "✅ Yes"].head(5)
+        flipped = rec_df[rec_df['Result'] == "✅ Approved"].head(5)
 
         if len(flipped) > 0:
-            st.success("### ✅ Configurations that FLIP the decision to Approved:")
+            st.success(f"### ✅ {len(flipped)} Configuration(s) that FLIP the decision to Approved:")
             st.dataframe(flipped, width='stretch', hide_index=True)
         else:
-            st.warning("No single configuration flips the decision. Consider these top improvements:")
-            st.dataframe(rec_df.head(5), width='stretch', hide_index=True)
-            st.markdown("**Additional suggestions:**")
+            st.error("### ⚠️ No single configuration flips this decision")
             st.markdown("""
-            - Add a co-applicant to increase total income
-            - Provide additional collateral
-            - Improve credit score over time (6+ months of on-time payments)
-            - Consult a financial advisor to reduce DTI
+            **This profile has fundamental risk factors that require longer-term improvement.**
+            The best changes we found are shown below, but they don't reach the approval threshold.
+            """)
+            st.dataframe(rec_df.head(5), width='stretch', hide_index=True)
+
+            st.markdown("### 🔧 Longer-term Actions Required")
+            st.markdown("""
+            1. **Improve Credit Score** — Increase to 650+ over 6–12 months of on-time payments
+            2. **Reduce Debt-to-Income** — Pay down existing loans before reapplying
+            3. **Add Co-applicant** — A second income significantly boosts approval chances
+            4. **Build Savings** — Maintain 3–6 months of EMI in savings
+            5. **Add Collateral** — Secured loans have much higher approval rates
             """)
 
     st.markdown("---")
