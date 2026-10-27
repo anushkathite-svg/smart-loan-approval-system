@@ -10,7 +10,7 @@ from PIL import Image
 # ==========================================
 # 1. LOAD YOUR EXISTING MODELS
 # ==========================================
-BASE = r'C:\Users\Anushka Thite\Desktop\smart-loan-system'
+BASE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODELS_DIR = os.path.join(BASE, 'models')
 
 @st.cache_resource
